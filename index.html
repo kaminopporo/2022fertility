@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2018-2022合計特殊出生率</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        /* HTMLとBody要素をビューポートいっぱいに広げる */
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #ffffff;
+        }
+        /* コンテナ（サイドバーと地図を横並びにする） */
+        .container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+            gap: 15px;
+            padding: 15px;
+            box-sizing: border-box;
+            align-items: stretch;
+            position: relative;
+        }
+        /* サイドバーのスタイル */
+        .sidebar {
+            width: 300px;
+            background-color: #fff2cc;
+            padding: 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+            border-radius: 15px;
+        }
+        /* スクロールバーのスタイル（WebKitブラウザ向け） */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background: #FFFFFF00;
+            border-radius: 15px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 15px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* ドラッグハンドルのスタイル (非表示にする) */
+        .sidebar-resizer {
+            display: none;
+        }
+        /* 地図が表示されるdiv要素 */
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            width: auto;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        /* サイドバー内の各セクションのスタイル */
+        .sidebar h1 {
+            font-size: 2em;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 5px;
+            text-align: left;
+            color: #000000;
+            line-height: 1.3;
+            display: block;
+        }
+        /* Info button style - 地図の右上に配置 */
+        .info-button {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: none;
+            border: none;
+            border-radius: 0;
+            width: 30px;
+            height: 30px;
+            font-family: 'Material Icons';
+            font-size: 20px;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+            transition: color 0.3s ease, transform 0.2s ease;
+            z-index: 600;
+        }
+        .info-button:hover {
+            color: #333;
+            transform: scale(1.02);
+        }
+        .legend {
+            margin-bottom: 30px;
+        }
+        .legend h2, .details h2 {
+            font-size: 1.4em;
+            font-weight: 500;
+            margin-top: 0;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+            color: #34495e;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            color: #4a4a4a;
+            padding: 5px 0;
+            transition: background-color 0.2s ease;
+            border-radius: 15px;
+        }
+        /* 選択された凡例項目のスタイル */
+        .legend-item.selected {
+            background-color: #e9e9e9;
+            font-weight: 600;
+            color: #000000;
+        }
+        /* アイコンのスタイル */
+        .legend-item .material-icons,
+        .legend-item .material-symbols-outlined {
+            font-size: 1.5em;
+            margin-right: 10px;
+            color: #666;
+        }
+        /* 塗り分けシンボルのスタイル */
+        .color-symbol {
+            width: 20px;
+            height: 20px;
+            border-radius: 15px;
+            margin-right: 10px;
+            flex-shrink: 0; /* シンボルが縮小するのを防ぐ */
+        }
+        .coloring-section .legend-item span {
+            font-size: 1.05em;
+            line-height: 1.4; /* テキストの折り返しを改善するために行の高さを調整 */
+            color: #444;
+        }
+        .details {
+            margin-top: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .details p {
+            font-size: 1.05em;
+            margin-bottom: 0px;
+            line-height: 1.2;
+            color: #4a4a4a;
+        }
+        /* 地図情報パネルのスタイル */
+        #info-panel {
+            background-color: #fdfdfd;
+            border-radius: 15px;
+            padding: 10px 15px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        #info-panel h2 {
+            font-size: 1.3em;
+            margin-top: 5px;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        #info-panel p {
+            font-size: 0.9em;
+            margin-bottom: 0px;
+            line-height: 1.1;
+            color: #666666;
+        }
+        /* 選択中の情報行をハイライト */
+        #info-panel p.highlight,
+        .leaflet-popup-content p.highlight {
+            color: #990000;
+        }
+        /* 新たに追加：情報行の太字部分 */
+        .info-label {
+            font-weight: 700;
+        }
+        /* 説明モーダル/パネルのスタイル */
+        .explanation-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .explanation-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .explanation-panel {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+        .explanation-overlay.active .explanation-panel {
+            transform: translateY(0);
+        }
+        .explanation-panel h2 {
+            font-size: 1.8em;
+            color: #000000;
+            margin-top: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        .explanation-panel p {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .explanation-panel ul {
+            list-style-type: disc;
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        .explanation-panel li {
+            font-size: 1.05em;
+            line-height: 1.6;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        /* 新しい凡例コンテナのスタイル */
+        .explanation-panel .legend-in-explanation {
+            margin-top: 25px;
+            margin-bottom: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .explanation-panel .legend-in-explanation h3 {
+            font-size: 1.2em; /* 統一 */
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #000000;
+            cursor: pointer;
+        }
+        .explanation-panel .legend-in-explanation .legend-item {
+            cursor: pointer;
+        }
+        /* 新しい塗り分けセクションのスタイル */
+        .explanation-panel .coloring-section {
+            margin-top: 25px;
+            margin-bottom: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .explanation-panel .coloring-section h3 {
+            font-size: 1.2em; /* 統一 */
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #000000;
+            cursor: pointer;
+        }
+        .coloring-section .legend-item {
+            display: flex;
+            align-items: center; /* アイテムを中央に揃える */
+            margin-bottom: 10px;
+            color: #4a4a4a;
+            padding: 5px 0;
+            transition: background-color 0.2s ease;
+            border-radius: 15px;
+            cursor: default;
+        }
+        .coloring-section .legend-item:hover {
+            background-color: transparent;
+        }
+        .explanation-panel .close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 2em;
+            color: #999;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .explanation-panel .close-button:hover {
+            color: #333;
+        }
+        /* 凡例内のテキストのスタイルを統一 */
+        .explanation-panel .legend-item span {
+            font-size: 1.05em;
+            line-height: 1.6;
+            color: #000000;
+        }
+        /* 新しく追加する区切り線 */
+        .explanation-panel .section-divider {
+            border-top: 1px solid #e0e0e0;
+            margin: 20px 0;
+        }
+        /* --- スマートフォン向けのスタイル (画面幅が768px以下の場合) --- */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 7.5px;
+                gap: 0;
+                height: 100%;
+                width: 100%;
+            }
+            .sidebar {
+                display: none;
+            }
+            #map {
+                flex-grow: 1;
+                height: 100%;
+                box-shadow: none;
+                overflow: hidden;
+            }
+            #info-panel {
+                display: none;
+            }
+            /* Info button on mobile */
+            .info-button {
+                top: 12.5px;
+                right: 12.5px;
+                width: 35px;
+                height: 35px;
+                font-size: 24px;
+                z-index: 600;
+            }
+            /* Leafletポップアップのスタイル調整 (変更箇所) */
+            .leaflet-popup-content-wrapper {
+                border-radius: 15px;
+                padding: 2px;
+                font-size: 13px;
+                line-height: 1.1;
+            }
+            .leaflet-popup-content h2 {
+                font-size: 1em;
+                margin-top: 0;
+                margin-bottom: 3px;
+                line-height: 1.1;
+                color: #000000;
+            }
+            .leaflet-popup-content p {
+                font-size: 0.8em;
+                margin-bottom: 1px;
+                line-height: 0.5;
+            }
+            /* 説明パネルのスマホ対応 */
+            .explanation-panel {
+                margin: auto;
+                align-self: center;
+                width: 75vw;
+                height: 75vh;
+                max-width: none;
+                max-height: none;
+                padding: 30px;
+                box-sizing: border-box;
+            }
+            .explanation-panel h2 {
+                font-size: 1.5em;
+            }
+            .explanation-panel p, .explanation-panel li {
+                font-size: 1em;
+            }
+        }
+        .legend-in-explanation h3,
+        .coloring-section h3 {
+            font-weight: 700;        /* 太字 */
+            cursor: default;         /* カーソルを「クリック不可」に */
+            pointer-events: none;    /* クリック自体を無効化 */
+        }
+        /* 新しく追加されたスタイル */
+        .indicator-selection h3 {
+            font-size: 1.2em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #000000;
+        }
+        .legend-in-explanation {
+            margin-bottom: 10px;
+        }
+        .legend-title {
+            font-size: 1.2em;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #000000;
+        }
+        .legend-item-line {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 15px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+        /* 新しいグラデーション凡例のスタイル */
+        .legend-gradient-container {
+            display: flex;
+            align-items: center;
+            height: 250px;
+            gap: 10px; /* グラデーションバーと値の間にスペースを作成 */
+        }
+        .legend-gradient-bar {
+            width: 30px;
+            height: 100%;
+            border-radius: 15px;
+        }
+        /* 凡例の値を垂直に並べるためのコンテナ */
+        .legend-gradient-values {
+            position: relative;
+            height: 100%;
+            width: 100px; /* 値の表示用に幅を確保 */
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        /* 各値のスタイル */
+        .legend-value {
+            position: absolute;
+            left: 0; /* 左揃えに変更 */
+            transform: translateY(-50%); /* 中央に配置 */
+            color: #333;
+            width: 100%;
+            white-space: nowrap; /* テキストの折り返しを防ぐ */
+        }
+        /* 指標選択セクションのスタイル */
+        .indicator-selection {
+            margin-bottom: 15px;
+        }
+        .indicator-selection-item {
+            display: block;
+            width: 100%;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border: none; /* 枠線を削除 */
+            border-radius: 15px;
+            background-color: transparent; /* 背景色を透明に設定 */
+            text-align: left;
+            font-size: 1.05em;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .indicator-selection-item:hover {
+            background-color: #e9e9e9;
+        }
+        .indicator-selection-item.active {
+            background-color: #d9e7ff;
+            border: 1px solid #a3c7ff; /* 選択時の枠線は維持 */
+            font-weight: 600;
+        }
+        /* 新しい凡例スタイル */
+        .legend-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .legend-list li {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-list .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <svg width="0" height="0" style="position:absolute; top:0; left:0;">
+        <defs>
+            <pattern id="stripe-pattern" patternUnits="userSpaceOnUse" width="10" height="10">
+                <rect x="0" y="0" width="5" height="10" fill="#0000ff" />
+                <rect x="5" y="0" width="5" height="10" fill="#9900ff" />
+            </pattern>
+        </defs>
+    </svg>
+    <div class="container">
+        <button id="infoButton" class="info-button" aria-label="地図の説明を表示">
+            <span class="material-icons">info</span>
+        </button>
+        <div class="sidebar" id="sidebar">
+            <h1>
+                2018-2022合計特殊出生率
+            </h1>
+            <div class="details">
+                <h2>詳細情報</h2>
+                <div id="info-panel">地図をクリックするとここに情報が表示されます。</div>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <div id="explanationOverlay" class="explanation-overlay">
+        <div class="explanation-panel">
+            <button class="close-button" id="closeExplanationButton" aria-label="説明を閉じる">&times;</button>
+            <h2>地図の説明</h2>
+            <p>この地図は、2018年から2022年までの各自治体における合計特殊出生率と標準化死亡比を示しています。各自治体は、選択された指標の高低によって塗り分けられます。</p>
+            <div class="section-divider"></div>
+            <div class="indicator-selection">
+                <h3>指標を選択</h3>
+                <button class="indicator-selection-item active" data-indicator="fertility">合計特殊出生率</button>
+                <button class="indicator-selection-item" data-indicator="smr-male">標準化死亡比（男）</button>
+                <button class="indicator-selection-item" data-indicator="smr-female">標準化死亡比（女）</button>
+            </div>
+            <h3>塗り分け</h3>
+            <div id="explanation-legend-list" class="legend-gradient-container"></div>
+            <div class="section-divider"></div>
+            <p><strong>出典</strong>: 厚生労働省が公表する「平成30年～令和４年　人口動態保健所・市区町村別統計」を用いています。</p>
+            <p><strong>合計特殊出生率</strong>: 「15 歳から 49 歳までの女性の年齢別出生率を合計したもの」で、1人の女性がその年齢別出生率で一生の間に生むとしたときの子どもの数に相当する。ここでは、5歳階級別の出生数及び女性の<strong>日本人人口</strong>で算出している。</p>
+            <p><strong>標準化死亡比</strong>: 性、地域ごとに「期待死亡数」（その地域の 5 歳階級別死亡率が全国の死亡率と同じとしたときの死亡数）に対する「実際の死亡数」の比を100倍したものであり、年齢構成の違い
+の影響を除いたものとして死亡状況の比較に用いている。標準化死亡比が<strong>100より大きい場合、その地域の死亡率は全国より高い</strong>と判断され、<strong>100 より小さい場合、全国より低い</strong>と判断される。</p>
+            <p><strong>データ</strong>: 人口規模の小さい地域があり数値が不安定となるところもあることから、地域間等の比較ができるようにするため、小地域の指標の推定に有効なベイズ統計学の手法（ベイズ推定）を用いている。</p>
+            <p><strong>除外自治体</strong>: 出典元の通り、2020年10月1日現在、東日本大震災による福島第一原子力発電所の事故に伴う避難指示区域に指定されていた町村及び集中豪雨による熊本県球磨川水系の被害を受けた村は除外しています（福島県双葉郡楢葉町、富岡町、川内村、大熊町、双葉町、浪江町、葛尾村、相馬郡飯舘村及び熊本県球磨郡球磨村）。</p>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Leafletマップの初期化
+        var map = L.map('map', { zoomControl: false }).setView([38.0, 138.0], 5);
+        // ベースマップ（背景地図）の追加
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        // --- GeoJSONデータの読み込みと表示 ---
+        var geojsonDataPath = '2022出生.json';
+        var geojsonLayer;
+        // N03_007をキーとして、関連するレイヤーを保持するマップ
+        const n03GroupLayers = new Map();
+        let highlightedLayers = [];
+
+        // データのカラム名
+        const municipalityNameColumn = 'GIS2022出生_自治体名';
+        const fertilityColumn = 'GIS2022出生_合計特殊出生率';
+        const fertilityRankColumn = 'GIS2022出生_率順位';
+        const smrMaleColumn = 'GIS2022出生_男';
+        const smrMaleRankColumn = 'GIS2022出生_男順位';
+        const smrFemaleColumn = 'GIS2022出生_女';
+        const smrFemaleRankColumn = 'GIS2022出生_女順位';
+        // N03_007カラム名
+        const n03Column = 'N03_007';
+
+        let currentIndicator = 'fertility'; // 初期指標
+        let minMaxValues = {}; // 最小値と最大値を保持するオブジェクト
+        
+        // 凡例と地図で共通して使用するカラースケール
+        const fertilityColors = {
+            '2.00-2.05': '#c5fe01',
+            '1.90-1.99': '#f1fc01',
+            '1.80-1.89': '#fee101',
+            '1.70-1.79': '#ffbb02',
+            '1.60-1.69': '#ff9d01',
+            '1.50-1.59': '#ff5c01',
+            '1.40-1.49': '#ff0e03',
+            '1.30-1.39': '#dc0024',
+            '1.20-1.29': '#cc0000',
+            '1.10-1.19': '#980000',
+            '1.00-1.09': '#b20d7b',
+            '0.80-0.99': '#820a6c',
+            '0.50-0.79': '#5a2051',
+            '0.00-0.49': '#000000'
+        };
+
+        // 塗り分け用のスタイルを決定する関数
+        function getFeatureStyle(feature) {
+            let value;
+            
+            // 指標ごとに塗り分けの基準を設定
+            switch (currentIndicator) {
+                case 'fertility':
+                    value = parseFloat(feature.properties[fertilityColumn]);
+                    // 2.06より上のロジック
+                    if (value > 2.06) {
+                         return {
+                            fillColor: '#1155cc',
+                            fillOpacity: 0.1 + (0.9 * Math.min(1, Math.max(0, (value - 2.06) / (minMaxValues.fertility.max - 2.06)))),
+                            weight: 1,
+                            opacity: 1,
+                            color: 'white',
+                            dashArray: '3'
+                        };
+                    } else if (Math.abs(value - 2.06) < 0.005) { // 2.06丁度の場合
+                        return {
+                            fillColor: 'transparent',
+                            fillOpacity: 0,
+                            weight: 1,
+                            opacity: 1,
+                            color: 'white',
+                            dashArray: '3'
+                        };
+                    }
+                    
+                    // 2.06より下の新しいロジック
+                    let fillColor;
+                    if (value >= 2.00) { fillColor = '#c5fe01'; }
+                    else if (value >= 1.90) { fillColor = '#f1fc01'; }
+                    else if (value >= 1.80) { fillColor = '#fee101'; }
+                    else if (value >= 1.70) { fillColor = '#ffbb02'; }
+                    else if (value >= 1.60) { fillColor = '#ff9d01'; }
+                    else if (value >= 1.50) { fillColor = '#ff5c01'; }
+                    else if (value >= 1.40) { fillColor = '#ff0e03'; }
+                    else if (value >= 1.30) { fillColor = '#dc0024'; }
+                    else if (value >= 1.20) { fillColor = '#cc0000'; }
+                    else if (value >= 1.10) { fillColor = '#980000'; }
+                    else if (value >= 1.00) { fillColor = '#b20d7b'; }
+                    else if (value >= 0.80) { fillColor = '#820a6c'; }
+                    else if (value >= 0.50) { fillColor = '#5a2051'; }
+                    else if (value >= 0.00) { fillColor = '#000000'; }
+                    else { // データなしの場合
+                        fillColor = '#cccccc';
+                    }
+                    
+                    return {
+                        fillColor: fillColor,
+                        fillOpacity: 0.8,
+                        weight: 1,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3'
+                    };
+                case 'smr-male':
+                case 'smr-female':
+                    const min = currentIndicator === 'smr-male' ? minMaxValues.smrMale.min : minMaxValues.smrFemale.min;
+                    const max = currentIndicator === 'smr-male' ? minMaxValues.smrMale.max : minMaxValues.smrFemale.max;
+                    const threshold = 100.0;
+                    value = parseFloat(feature.properties[currentIndicator === 'smr-male' ? smrMaleColumn : smrFemaleColumn]);
+                    
+                    if (value === null || isNaN(value)) {
+                        return { fillColor: '#cccccc', fillOpacity: 0.8, weight: 1, opacity: 1, color: 'white', dashArray: '3' };
+                    } else if (Math.abs(value - threshold) < 0.005) {
+                        return { fillColor: 'transparent', fillOpacity: 0, weight: 1, opacity: 1, color: 'white', dashArray: '3' };
+                    } else if (value > threshold) {
+                        const normalizedValue = Math.min(1, Math.max(0, (value - threshold) / (max - threshold)));
+                        return { fillColor: '#990000', fillOpacity: 0.1 + (0.9 * normalizedValue), weight: 1, opacity: 1, color: 'white', dashArray: '3' };
+                    } else { // value < threshold
+                        const normalizedValue = Math.min(1, Math.max(0, (threshold - value) / (threshold - min)));
+                        return { fillColor: '#1155cc', fillOpacity: 0.1 + (0.9 * normalizedValue), weight: 1, opacity: 1, color: 'white', dashArray: '3' };
+                    }
+                default:
+                    return { fillColor: '#cccccc', fillOpacity: 0.8, weight: 1, opacity: 1, color: 'white', dashArray: '3' };
+            }
+        }
+
+        function updateMapStyle() {
+            if (geojsonLayer) {
+                geojsonLayer.eachLayer(layer => {
+                    geojsonLayer.resetStyle(layer); // スタイルをリセット
+                    layer.setStyle(getFeatureStyle(layer.feature));
+                });
+            }
+        }
+
+        const highlightStyle = {
+            weight: 3,
+            color: '#990000',
+            dashArray: '',
+        };
+        
+        // 全てのハイライトをリセットし、情報パネルをクリアする関数
+        function resetAllHighlightsAndPanel() {
+            if (highlightedLayers.length > 0) {
+                highlightedLayers.forEach(layer => {
+                    geojsonLayer.resetStyle(layer);
+                });
+                highlightedLayers = [];
+            }
+            document.getElementById('info-panel').innerHTML = '地図をクリックするとここに情報が表示されます。';
+        }
+
+        // フィーチャがクリックされた時の処理
+        function clickFeature(e) {
+            // 地図全体へのイベント伝播を停止
+            L.DomEvent.stopPropagation(e);
+
+            // 現在ハイライトされている地物がある場合、スタイルをリセット
+            const n03Value = e.target.feature.properties[n03Column];
+            const isAlreadyHighlighted = highlightedLayers.length > 0 && highlightedLayers[0].feature.properties[n03Column] === n03Value;
+            
+            if (!isAlreadyHighlighted) {
+                resetAllHighlightsAndPanel();
+            }
+
+            var properties = e.target.feature.properties;
+            if (properties) {
+                if (!isAlreadyHighlighted) {
+                    if (n03GroupLayers.has(n03Value)) {
+                        highlightedLayers = n03GroupLayers.get(n03Value);
+                        highlightedLayers.forEach(layer => {
+                            layer.setStyle(highlightStyle);
+                            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                                layer.bringToFront();
+                            }
+                        });
+                    }
+                }
+                
+                const municipalityName = properties[municipalityNameColumn] || '自治体名なし';
+                
+                // データが存在する場合のみ順位を表示
+                const fertilityValue = properties[fertilityColumn] !== null ? `${parseFloat(properties[fertilityColumn]).toFixed(2)} (${parseInt(properties[fertilityRankColumn]).toLocaleString()}位)` : 'データなし';
+                const smrMaleValue = properties[smrMaleColumn] !== null ? `${parseFloat(properties[smrMaleColumn]).toFixed(2)} (${parseInt(properties[smrMaleRankColumn]).toLocaleString()}位)` : 'データなし';
+                const smrFemaleValue = properties[smrFemaleColumn] !== null ? `${parseFloat(properties[smrFemaleColumn]).toFixed(2)} (${parseInt(properties[smrFemaleRankColumn]).toLocaleString()}位)` : 'データなし';
+                
+                let infoContent = `<h2>${municipalityName}</h2>`;
+                
+                // 選択された指標に応じてクラスを追加
+                const isFertility = currentIndicator === 'fertility' ? ' class="highlight"' : '';
+                const isSmrMale = currentIndicator === 'smr-male' ? ' class="highlight"' : '';
+                const isSmrFemale = currentIndicator === 'smr-female' ? ' class="highlight"' : '';
+
+                infoContent += `<p${isFertility}><strong>合計特殊出生率</strong>: ${fertilityValue}</p>`;
+                infoContent += `<p${isSmrMale}><strong>標準化死亡比（男）</strong>: ${smrMaleValue}</p>`;
+                infoContent += `<p${isSmrFemale}><strong>標準化死亡比（女）</strong>: ${smrFemaleValue}</p>`;
+
+                if (window.innerWidth <= 768) {
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(infoContent)
+                        .openOn(map);
+                } else {
+                    document.getElementById('info-panel').innerHTML = infoContent;
+                }
+            }
+        }
+        
+        // 各フィーチャにクリックイベントを追加
+        function onEachFeature(feature, layer) {
+            const n03Value = feature.properties[n03Column];
+            if (n03Value) {
+                if (!n03GroupLayers.has(n03Value)) {
+                    n03GroupLayers.set(n03Value, []);
+                }
+                n03GroupLayers.get(n03Value).push(layer);
+            }
+            
+            layer.on({
+                click: clickFeature
+            });
+        }
+
+        fetch(geojsonDataPath)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('GeoJSONファイルの読み込みに失敗しました: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // データの最小値・最大値を計算
+                minMaxValues.fertility = { min: 0.00, max: -Infinity }; // 最小値を0.00に固定
+                minMaxValues.smrMale = { min: Infinity, max: -Infinity };
+                minMaxValues.smrFemale = { min: Infinity, max: -Infinity };
+
+                data.features.forEach(feature => {
+                    const props = feature.properties;
+                    if (props[fertilityColumn] !== null) {
+                        const val = parseFloat(props[fertilityColumn]);
+                        minMaxValues.fertility.max = Math.max(minMaxValues.fertility.max, val);
+                    }
+                    if (props[smrMaleColumn] !== null) {
+                        const val = parseFloat(props[smrMaleColumn]);
+                        minMaxValues.smrMale.min = Math.min(minMaxValues.smrMale.min, val);
+                        minMaxValues.smrMale.max = Math.max(minMaxValues.smrMale.max, val);
+                    }
+                    if (props[smrFemaleColumn] !== null) {
+                        const val = parseFloat(props[smrFemaleColumn]);
+                        minMaxValues.smrFemale.min = Math.min(minMaxValues.smrFemale.min, val);
+                        minMaxValues.smrFemale.max = Math.max(minMaxValues.smrFemale.max, val);
+                    }
+                });
+
+                geojsonLayer = L.geoJSON(data, {
+                    style: getFeatureStyle,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                var bounds = geojsonLayer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds);
+                }
+                
+                // データ読み込み後に凡例パネルを自動で開く
+                infoButton.click();
+            })
+            .catch(error => {
+                console.error('GeoJSONファイルの読み込みまたは処理中にエラーが発生しました:', error);
+            });
+            
+        // 地図上の空いている場所をクリックしたときにハイライトをリセット
+        map.on('click', resetAllHighlightsAndPanel);
+
+        // --- 説明モーダルのJavaScript制御と凡例の生成 ---
+        const infoButton = document.getElementById('infoButton');
+        const explanationOverlay = document.getElementById('explanationOverlay');
+        const closeExplanationButton = document.getElementById('closeExplanationButton');
+        const indicatorButtons = document.querySelectorAll('.indicator-selection-item');
+
+        infoButton.addEventListener('click', () => {
+            explanationOverlay.classList.add('active');
+            generateLegend();
+        });
+
+        closeExplanationButton.addEventListener('click', () => {
+            explanationOverlay.classList.remove('active');
+        });
+
+        // オーバーレイの背景をクリックで閉じる
+        explanationOverlay.addEventListener('click', (e) => {
+            if (e.target === explanationOverlay) {
+                explanationOverlay.classList.remove('active');
+            }
+        });
+
+        // ESCキーで閉じる
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && explanationOverlay.classList.contains('active')) {
+                explanationOverlay.classList.remove('active');
+            }
+        });
+
+        // 指標選択ボタンのイベントリスナー
+        indicatorButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelector('.indicator-selection-item.active').classList.remove('active');
+                button.classList.add('active');
+                currentIndicator = button.dataset.indicator;
+                updateMapStyle();
+                generateLegend();
+            });
+        });
+        
+        // 凡例を動的に生成する
+        function generateLegend() {
+            const container = document.getElementById('explanation-legend-list');
+            if (!container) return;
+            container.innerHTML = ''; // コンテンツをクリア
+            
+            let gradient, valuesHtml = '';
+            
+            if (currentIndicator === 'fertility') {
+                const min = 0.00;
+                const max = minMaxValues.fertility.max;
+                
+                // 14色の色分けとグラデーション、透明色を正確に表現する
+                const colorStopsData = [
+                    { value: 0.00, color: '#000000' },
+                    { value: 0.49, color: '#000000' },
+                    { value: 0.50, color: '#5a2051' },
+                    { value: 0.79, color: '#5a2051' },
+                    { value: 0.80, color: '#820a6c' },
+                    { value: 0.99, color: '#820a6c' },
+                    { value: 1.00, color: '#b20d7b' },
+                    { value: 1.09, color: '#b20d7b' },
+                    { value: 1.10, color: '#980000' },
+                    { value: 1.19, color: '#980000' },
+                    { value: 1.20, color: '#cc0000' },
+                    { value: 1.29, color: '#cc0000' },
+                    { value: 1.30, color: '#dc0024' },
+                    { value: 1.39, color: '#dc0024' },
+                    { value: 1.40, color: '#ff0e03' },
+                    { value: 1.49, color: '#ff0e03' },
+                    { value: 1.50, color: '#ff5c01' },
+                    { value: 1.59, color: '#ff5c01' },
+                    { value: 1.60, color: '#ff9d01' },
+                    { value: 1.69, color: '#ff9d01' },
+                    { value: 1.70, color: '#ffbb02' },
+                    { value: 1.79, color: '#ffbb02' },
+                    { value: 1.80, color: '#fee101' },
+                    { value: 1.89, color: '#fee101' },
+                    { value: 1.90, color: '#f1fc01' },
+                    { value: 1.99, color: '#f1fc01' },
+                    { value: 2.00, color: '#c5fe01' },
+                    { value: 2.05, color: '#c5fe01' },
+                    { value: 2.06, color: 'transparent' }, // 2.06ちょうどを透明に
+                    { value: 2.06, color: '#1155cc' }, // 2.06以上は青のグラデーション
+                    { value: max, color: '#1155cc' }
+                ];
+
+                const gradientCss = colorStopsData.map(stop => {
+                    const position = ((stop.value - min) / (max - min)) * 100;
+                    return `${stop.color} ${position.toFixed(2)}%`;
+                }).join(', ');
+                
+                gradient = `linear-gradient(to top, ${gradientCss})`;
+                
+                // 値の表示
+                valuesHtml = `
+                    <span class="legend-value" style="top: ${(1 - (2.06 - min) / (max - min)) * 100}%;">2.06（人口置換水準）</span>
+                    <span class="legend-value" style="top: ${(1 - (0.00 - min) / (max - min)) * 100}%;">0.00</span>
+                `;
+
+            } else { // smr-male, smr-female
+                const min = currentIndicator === 'smr-male' ? minMaxValues.smrMale.min : minMaxValues.smrFemale.min;
+                const max = currentIndicator === 'smr-male' ? minMaxValues.smrMale.max : minMaxValues.smrFemale.max;
+                const threshold = 100;
+
+                const thresholdPos = (threshold - min) / (max - min) * 100;
+
+                gradient = `linear-gradient(to top, #990000, #1155cc)`;
+                
+                valuesHtml = `
+                    <span class="legend-value" style="top: 0%;">高い</span>
+                    <span class="legend-value" style="top: 50%;">100</span>
+                    <span class="legend-value" style="top: 100%;">低い</span>
+                `;
+            }
+
+            container.innerHTML = `
+                <div class="legend-gradient-bar" style="background: ${gradient};"></div>
+                <div class="legend-gradient-values">
+                    ${valuesHtml}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
